@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Freshgate</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <div>
+        <p class="eyebrow">Bifrost 04 · Tavily 01</p>
+        <h1>Freshgate</h1>
+        <p class="lede">A gateway check for answers that can go stale. Ask through Bifrost, or paste any model answer. Time-sensitive claims are re-checked with Tavily and scored.</p>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="modes" role="tablist">
+          <button id="mode-ask" class="mode active" type="button">Ask Bifrost</button>
+          <button id="mode-paste" class="mode" type="button">Check an answer</button>
+        </div>
+
+        <div id="ask-fields">
+          <label for="q">Question</label>
+          <textarea id="q">Who is the current CEO of OpenAI, and what changed at the company recently?</textarea>
+        </div>
+
+        <div id="paste-fields" hidden>
+          <label for="pasted">Any LLM answer</label>
+          <textarea id="pasted">Arvind Krishna is the current CEO of OpenAI. GPT-4 input costs $2 per token.</textarea>
+        </div>
+
+        <button id="go" type="button">Ask through Bifrost</button>
+        <p id="status" class="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Answer</h2>
+        <p id="overall" class="overall"></p>
+        <p id="answer" class="answer">The model answer will appear here.</p>
+        <h2>Claim checks</h2>
+        <div id="claims" class="claims">
+          <p class="empty">Freshness scores show up after you run a check.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
