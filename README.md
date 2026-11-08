@@ -72,7 +72,35 @@ uvicorn app.main:app --reload --port 8000
 
 Open http://127.0.0.1:8000. Leave both terminals running. Do not commit `.env`.
 
+## Deploy frontend + backend on Vercel
+
+One Vercel project serves both the UI and the FastAPI app (`main.py`). Bifrost is not hosted on Vercel — set `BIFROST_URL` to a public Bifrost host (not `127.0.0.1`).
+
+Live: https://freshgate-deploy.vercel.app
+
+```bash
+npx vercel --prod
+```
+
+Or import the GitHub repo in the Vercel dashboard. Root Directory = this repo root. Add:
+
 ```text
+BIFROST_URL=https://your-public-bifrost-host
+BIFROST_VK=sk-bf-...
+BIFROST_MODEL=openai/gpt-5
+TAVILY_API_KEY=tvly-...
+FRESHGATE_THRESHOLD=60
+FRESHGATE_POLICY=correct
+OPENAI_STT_MODEL=openai/whisper-1
+OPENAI_TTS_MODEL=openai/tts-1
+OPENAI_TTS_VOICE=alloy
+```
+
+Then open the Vercel URL. Same-origin paths: `/`, `/v1/chat`, `/verify`, `/api/transcribe`, `/api/speak`.
+
+```text
+main.py                  Vercel FastAPI entry (serves UI + API)
+vercel.json              Function limits (60s)
 backend/app/routers/     /v1/chat, /verify, /api/transcribe, /api/speak, /api/health
 backend/app/services/    Bifrost client and Tavily scoring
 frontend/                Demo page
