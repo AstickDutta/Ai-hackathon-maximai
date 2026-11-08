@@ -1,8 +1,8 @@
 # Freshgate
 
-Freshgate checks whether an LLM answer is still true. Prices, API versions, laws, and job titles change, and a gateway can keep serving the old sentence. Freshgate pulls those claims out, re-checks them against live sources, and returns a freshness score for each one.
+Freshgate checks whether an LLM answer is still true. Prices, API versions, laws, and job titles change, and a gateway can keep serving the old sentence. Time-sensitive sentences are re-checked with Tavily against trusted sources, and each claim gets a freshness score. A gateway policy then decides whether to pass, warn, correct, or hold.
 
-**Ask Bifrost** sends your question through the gateway, then scores the model's answer. **Check an answer** skips the model and scores text you paste. Both use the same check. A score under 60 is flagged as likely stale. The number for the whole answer is the lowest claim score.
+**Ask Bifrost** sends any question through the gateway, then scores that answer. You can type or hold the mic to speak. **Check an answer** scores text you paste. **Speak answer** turns the final answer into audio with OpenAI TTS. A score under `FRESHGATE_THRESHOLD` is flagged. Set `FRESHGATE_POLICY` to `warn`, `correct`, or `hold`.
 
 The score follows the wording, not the model name. Change the model with `BIFROST_MODEL` in `.env` (`provider/model`, for example `gemini/gemini-3.1-flash-lite`) and restart the API.
 
@@ -10,8 +10,8 @@ The score follows the wording, not the model name. Change the model with `BIFROS
 
 | Technology | Why it is here |
 | --- | --- |
-| [Bifrost](https://github.com/maximhq/bifrost) | One OpenAI-compatible gateway in front of the model. Freshgate is the check Bifrost does not do on the way out: `X-Freshgate-Score` and `X-Freshgate-Flagged`. |
-| Tavily | Live search for each risky claim. Leadership claims are re-queried as "current CEO of …" so the score is compared with a current answer, not with pages that repeat the claim. |
+| [Bifrost](https://github.com/maximhq/bifrost) | One OpenAI-compatible gateway in front of the model. It also lists the factual claims in the answer. Freshgate is the check Bifrost does not do on the way out: `X-Freshgate-Score` and `X-Freshgate-Flagged`. |
+| Tavily | Live search for each claim. Reddit-style pages are filtered down; official and news domains are preferred. |
 | Gemini | The chat model behind Bifrost. `gemini-3.1-flash-lite` is the default because it returns in about a second. |
 | FastAPI | The API that proxies `/v1/chat` to Bifrost and exposes `/verify` for a pasted answer. |
 | HTML, CSS, JavaScript | The demo page. No separate frontend build. |
@@ -58,6 +58,11 @@ TAVILY_API_KEY=tvly-your-key
 BIFROST_URL=http://127.0.0.1:8080
 BIFROST_MODEL=gemini/gemini-3.1-flash-lite
 BIFROST_VK=sk-bf-your-virtual-key
+FRESHGATE_THRESHOLD=60
+FRESHGATE_POLICY=correct
+OPENAI_STT_MODEL=openai/whisper-1
+OPENAI_TTS_MODEL=openai/tts-1
+OPENAI_TTS_VOICE=alloy
 ```
 
 ```bash
@@ -68,7 +73,7 @@ uvicorn app.main:app --reload --port 8000
 Open http://127.0.0.1:8000. Leave both terminals running. Do not commit `.env`.
 
 ```text
-backend/app/routers/     /v1/chat, /verify, /api/health
+backend/app/routers/     /v1/chat, /verify, /api/transcribe, /api/speak, /api/health
 backend/app/services/    Bifrost client and Tavily scoring
 frontend/                Demo page
 ```

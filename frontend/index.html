@@ -12,7 +12,7 @@
       <div>
         <p class="eyebrow">Bifrost 04 · Tavily 01</p>
         <h1>Freshgate</h1>
-        <p class="lede">A gateway check for answers that can go stale. Ask through Bifrost, or paste any model answer. Time-sensitive claims are re-checked with Tavily and scored.</p>
+        <p class="lede">Ask any question. Bifrost answers it, Tavily re-checks the claims against trusted sources, and the gateway policy decides whether to pass, warn, correct, or hold.</p>
       </div>
     </header>
 
@@ -25,7 +25,7 @@
 
         <div id="ask-fields">
           <label for="q">Question</label>
-          <textarea id="q">Who is the current CEO of OpenAI, and what changed at the company recently?</textarea>
+          <textarea id="q" placeholder="Type or tap the mic and speak"></textarea>
         </div>
 
         <div id="paste-fields" hidden>
@@ -33,21 +33,36 @@
           <textarea id="pasted">Arvind Krishna is the current CEO of OpenAI. GPT-4 input costs $2 per token.</textarea>
         </div>
 
-        <button id="go" type="button">Ask through Bifrost</button>
+        <div class="actions">
+          <button id="mic" class="ghost" type="button">Hold to talk</button>
+          <button id="go" type="button">Ask through Bifrost</button>
+        </div>
         <p id="status" class="status" aria-live="polite"></p>
       </section>
 
       <section class="panel">
         <h2>Answer</h2>
+        <p id="asked" class="reason"></p>
+        <p id="model-line" class="reason"></p>
         <p id="overall" class="overall"></p>
+        <p id="policy-line" class="reason"></p>
         <p id="answer" class="answer">The model answer will appear here.</p>
-        <h2>Claim checks</h2>
+        <button id="speak" class="ghost" type="button" hidden>Speak answer</button>
+        <div id="final-wrap" hidden>
+          <h2>Final answer for clients</h2>
+          <p id="final-answer" class="answer"></p>
+        </div>
+        <div id="corrected-wrap" hidden>
+          <h2>Corrected answer</h2>
+          <p id="corrected" class="answer"></p>
+        </div>
+        <h2 id="checks-title">Claim checks</h2>
         <div id="claims" class="claims">
           <p class="empty">Freshness scores show up after you run a check.</p>
         </div>
       </section>
     </main>
   </div>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>
