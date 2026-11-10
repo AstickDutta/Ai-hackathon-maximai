@@ -13,9 +13,14 @@ from app.services.bifrost import BifrostError, ask
 TRUSTED_HOST_SUFFIXES = (
     ".gov",
     ".gov.uk",
+    ".gov.in",
     ".europa.eu",
     "usa.gov",
     "whitehouse.gov",
+    "india.gov.in",
+    "pib.gov.in",
+    "presidentofindia.gov.in",
+    "pmindia.gov.in",
     "reuters.com",
     "apnews.com",
     "bbc.com",
@@ -27,6 +32,7 @@ TRUSTED_HOST_SUFFIXES = (
     "theguardian.com",
     "npr.org",
     "wikipedia.org",
+    "britannica.com",
     "openai.com",
     "microsoft.com",
     "apple.com",
@@ -51,15 +57,10 @@ LOW_TRUST_HOSTS = (
     "twitter.com",
     "youtube.com",
     "youtu.be",
+    "newser.com",
+    "msn.com",
+    "dailymail.co.uk",
 )
-EXCLUDE_DOMAINS = (
-    "reddit.com",
-    "quora.com",
-    "medium.com",
-    "pinterest.com",
-    "tiktok.com",
-)
-
 STALE_HINT = re.compile(
     r"\b(ceo|cto|founder|president|price|pricing|costs?|\$\d|version|v\d|api|law|act|regulation|acquired|hired|launch|released|as of|currently|today|stepped down)\b",
     re.I,
@@ -201,7 +202,7 @@ def named_holder(text: str) -> str | None:
 def search_query(claim: str) -> str:
     target = leadership_target(claim)
     if target:
-        return f"current {target[1]}"
+        return f"who is the current {target[1]}"
     office = re.search(
         r"\bcurrent (CEO|president|prime minister) of ((?:the )?[A-Z0-9][A-Za-z0-9&.\- ]*?)(?=\s+is\b|[.?!]|$)",
         claim,
@@ -209,6 +210,14 @@ def search_query(claim: str) -> str:
     )
     if office:
         return f"current {office.group(1)} of {office.group(2).strip(' .')}"
+    # "X is the current President of India" style
+    swapped = re.search(
+        r"\bis the current (CEO|president|prime minister) of\s+((?:the\s+)?[A-Z][A-Za-z0-9&.\- ]{1,40})",
+        claim,
+        re.I,
+    )
+    if swapped:
+        return f"who is the current {swapped.group(1)} of {swapped.group(2).strip(' .')}"
     if re.search(r"GPT-4", claim) and re.search(r"\$\s?\d", claim):
         return "current OpenAI GPT-4 API input price per million tokens"
     if re.search(r"\bAI Act\b", claim):
@@ -229,7 +238,12 @@ def source_trust(url: str | None) -> int:
         return 40
     if any(host == bad or host.endswith("." + bad) for bad in LOW_TRUST_HOSTS):
         return 10
-    if host.endswith(".gov") or host.endswith(".gov.uk") or host.endswith(".europa.eu"):
+    if (
+        host.endswith(".gov")
+        or host.endswith(".gov.uk")
+        or host.endswith(".gov.in")
+        or host.endswith(".europa.eu")
+    ):
         return 100
     for suffix in TRUSTED_HOST_SUFFIXES:
         clean = suffix.lstrip(".")
@@ -238,13 +252,58 @@ def source_trust(url: str | None) -> int:
     return 45
 
 
-def rank_sources(sources: list[dict]) -> list[dict]:
+def source_relevance(claim: str, source: dict) -> int:
+    """Prefer links whose title/snippet actually talk about the claim topic."""
+    blob = f"{source.get('title') or ''} {source.get('snippet') or ''}".lower()
+    if not blob.strip():
+        return 0
+    words = [
+        word
+        for word in re.findall(r"[a-z0-9]+", claim.lower())
+        if len(word) > 2
+        and word
+        not in {
+            "the",
+            "and",
+            "for",
+            "are",
+            "was",
+            "were",
+            "current",
+            "currently",
+            "this",
+            "that",
+            "with",
+            "from",
+            "has",
+            "have",
+        }
+    ]
+    if not words:
+        return 0
+    hits = sum(1 for word in words if word in blob)
+    # Role words strongly mark on-topic leadership pages.
+    roles = ("president", "prime", "minister", "ceo", "chief")
+    role_hit = 10 if any(role in blob for role in roles if role in claim.lower()) else 0
+    return hits * 5 + role_hit
+
+
+def rank_sources(sources: list[dict], claim: str = "") -> list[dict]:
     ranked = []
     for source in sources:
         item = dict(source)
         item["trust"] = source_trust(item.get("url"))
+        item["relevance"] = source_relevance(claim, item)
         ranked.append(item)
-    ranked.sort(key=lambda item: (-item["trust"], item.get("age_days") is None, item.get("age_days") or 10_000))
+    # On-topic first, then trust. Keep Reddit/etc. — just don't surface cricket for a president claim.
+    ranked.sort(
+        key=lambda item: (
+            -item.get("relevance", 0),
+            -item["trust"],
+            item.get("age_days") is None,
+            item.get("age_days") or 10_000,
+        )
+    )
     return ranked
 
 
@@ -344,6 +403,44 @@ def classify_overlap(claim: str, evidence: str) -> tuple[str, str]:
     return "unknown", quote
 
 
+def classify_explicit_denial(claim: str, evidence: str) -> tuple[str, str] | None:
+    """Catch 'X is a Y' claims when live text says X is NOT a Y (overlap alone would wrongly agree)."""
+    match = re.match(
+        r"^\s*(.+?)\s+is\s+(an?\s+|the\s+)?(.+?)\s*\.?\s*$",
+        claim.strip(),
+        re.I,
+    )
+    if not match:
+        return None
+    subject = match.group(1).strip()
+    role = match.group(3).strip(" .")
+    if len(subject) < 3 or len(role) < 3:
+        return None
+    evidence_l = evidence.lower()
+    subject_l = subject.lower()
+    role_l = role.lower()
+    if subject_l not in evidence_l:
+        return None
+    denial = re.compile(
+        rf"(?:{re.escape(subject_l)}.{{0,120}})?\b(?:is|are|was|were)\s+not\s+(?:an?\s+|the\s+)?{re.escape(role_l)}\b"
+        rf"|\bnot\s+(?:an?\s+|the\s+)?{re.escape(role_l)}\b"
+        rf"|\brather\s+(?:a|an|the)\b.{{0,40}}\b(?:businessman|businesswoman|executive|chairman|owner|minister|politician)\b",
+        re.I,
+    )
+    hit = denial.search(evidence)
+    if not hit:
+        # Broader: "is not a ..." in same sentence as the subject
+        for sentence in split_sentences(evidence):
+            if subject_l in sentence.lower() and re.search(
+                rf"\b(?:is|are)\s+not\s+(?:an?\s+|the\s+)?{re.escape(role_l)}\b",
+                sentence,
+                re.I,
+            ):
+                return "disagrees", sentence[:400]
+        return None
+    return "disagrees", quote_from(evidence, denial)
+
+
 def judge_claim(claim: str, live_answer: str, sources: list[dict]) -> dict:
     evidence = evidence_text(live_answer, sources)
     if not evidence:
@@ -357,7 +454,10 @@ def judge_claim(claim: str, live_answer: str, sources: list[dict]) -> dict:
     claimed_holder = named_holder(claim)
     live_holder = named_holder(evidence)
     target = leadership_target(claim)
-    if claimed_holder and live_holder and claimed_holder.lower() != live_holder.lower():
+    denial = classify_explicit_denial(claim, evidence)
+    if denial is not None:
+        verdict, quote = denial
+    elif claimed_holder and live_holder and claimed_holder.lower() != live_holder.lower():
         verdict, quote = "disagrees", quote_from(evidence, re.compile(re.escape(live_holder), re.I))
     elif target:
         verdict, quote = classify_person(target[0], evidence)
@@ -462,16 +562,14 @@ def verify_claim(claim: str) -> dict:
         return failed_claim(claim, "Set TAVILY_API_KEY in .env.")
 
     query = search_query(claim)
-    current_office = bool(re.search(r"\bcurrent (CEO|president|prime minister)\b", query, re.I))
+    # Use general search for offices — "news" returns trade/cricket noise for Modi/India.
     try:
         found = TavilyClient(api_key=key).search(
             query=query,
-            max_results=5,
-            search_depth="fast",
+            max_results=8,
+            search_depth="advanced",
             include_answer=True,
-            topic="news" if current_office else "general",
-            time_range="year" if current_office else None,
-            exclude_domains=list(EXCLUDE_DOMAINS),
+            topic="general",
             timeout=20,
         )
     except Exception as exc:
@@ -493,7 +591,11 @@ def verify_claim(claim: str) -> dict:
                 "snippet": (item.get("content") or "")[:400],
             }
         )
-    sources = rank_sources(sources)
+    sources = rank_sources(sources, claim)
+    # Drop clearly off-topic links from the UI (keep some if everything is weak).
+    topical = [source for source in sources if source.get("relevance", 0) >= 10]
+    if topical:
+        sources = topical[:5]
     live_answer = (found.get("answer") or "").strip()
     judged = judge_claim(claim, live_answer, sources)
     threshold = settings.freshgate_threshold

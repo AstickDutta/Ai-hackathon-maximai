@@ -330,12 +330,13 @@ function renderClaims(items) {
     reason.textContent = item.reason || "";
     card.append(reason);
 
-    const source = item.sources?.[0];
-    if (source?.url) {
+    const sources = (item.sources || []).filter((source) => source?.url).slice(0, 5);
+    for (const source of sources) {
       const link = document.createElement("a");
       link.href = source.url;
       link.target = "_blank";
-      link.rel = "noreferrer";
+      link.rel = "noopener noreferrer";
+      link.className = "source-link";
       const trust = source.trust != null ? ` · trust ${source.trust}` : "";
       const when = source.published ? ` · ${source.published}` : "";
       link.textContent = `${source.title || source.url}${trust}${when}`;

@@ -187,6 +187,7 @@ button:disabled {
 }
 
 a { color: #b7c4ff; }
+a.source-link { display: block; margin-top: 6px; word-break: break-word; }
 
 .empty, .error { color: var(--muted); margin: 0; }
 .error { color: var(--bad); }
